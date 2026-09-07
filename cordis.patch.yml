@@ -1,0 +1,30 @@
+# The dsh-cortex bundle patch: interactive terminal agent directly over
+# dsh-base. It mounts no Host, HTTP server, Web runtime, or browser plugin.
+# An ordinary provider plugin (cortex-startup) injects `cmdlineArgs`, parses
+# the optional task positional and flags, then the driver creates an Agent
+# through the core registry.
+
+- insert:
+    # Durable workspace registry: register the current cwd as a workspace and
+    # attach each new session to it (codex-style cwd-as-group).
+    - id: workspace
+      name: '@deepseek-ai/dsh-workspace'
+
+    # Model-facing ask_user_question tool: lets the agent pause and ask the
+    # user questions (options or free text) mid-turn; cortex answers via its
+    # terminal question UI (registered on the agent-scoped waterfall).
+    - id: tool-ask-user
+      name: '@deepseek-ai/dsh-tool-ask-user'
+
+    - id: cortex-startup
+      name: 'dsh-cortex/startup'
+
+    # Reads its startup values from the ordinary cortexStartup provider.
+    - id: dsh-cortex
+      name: 'dsh-cortex'
+      inject: [cortexStartup]
+      config:
+        task: !!js ctx.cortexStartup.task
+        resume: !!js ctx.cortexStartup.resume
+        last: !!js ctx.cortexStartup.last
+        pick: !!js ctx.cortexStartup.pick

@@ -1,0 +1,81 @@
+{
+  "name": "dsh-cortex",
+  "version": "0.1.0",
+  "description": "An interactive codex-style terminal CLI for DeepSeek Harness: a persistent REPL session driver with streaming output.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./startup": {
+      "types": "./lib/startup.d.ts",
+      "default": "./lib/startup.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/startup.js",
+    "lib/index.d.ts",
+    "lib/startup.d.ts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "cordis",
+    "plugin",
+    "cli",
+    "repl",
+    "cortex"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-session": ">=0.1.1-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-agent": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-agent-default-model": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-brand": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.1.2-rc.1",
+    "@types/node": "^24.0.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.0",
+    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/dsh-cmdline": "0.1.2-rc.1",
+    "commander": "^15.0.0",
+    "@types/react": "^19.2.0",
+    "@deepseek-ai/dsh-workspace": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-sandbox-policy": "0.1.2-rc.1",
+    "ink-testing-library": "^4.0.0"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "dependencies": {
+    "ink": "^7.1.1",
+    "react": "^19.2.0",
+    "ink-text-input": "^6.0.0",
+    "chalk": "^5.4.1",
+    "ink-scroll-view": "^0.3.7",
+    "string-width": "^8.2.0"
+  }
+}

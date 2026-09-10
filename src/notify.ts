@@ -1,5 +1,5 @@
 /**
- * dsh-cortex — 提问提醒（presence-aware，TUI 版）。
+ * cortex — 提问提醒（presence-aware，TUI 版）。
  *
  * TUI 没有浏览器的 `visibilitychange`/`hasFocus`，无法直接判断用户是否离开。
  * 这里用**超时**近似：提问后等待 QUESTION_ALERT_DELAY_MS，仍未回答才提醒。
@@ -8,7 +8,7 @@
  * 提醒手段：macOS 系统通知（`osascript -e 'display notification ...'`，
  * 系统自带、零依赖）。失败静默——提醒是尽力而为，绝不影响问答本身。
  *
- * @module dsh-cortex/notify
+ * @module cortex/notify
  */
 
 import { execFile } from 'node:child_process'
@@ -16,8 +16,8 @@ import { execFile } from 'node:child_process'
 /** 提问后多久未回答才提醒（毫秒）。 */
 export const QUESTION_ALERT_DELAY_MS = 60_000
 
-/** 通知标题（macOS 横幅显示）。 */
-const NOTIFY_TITLE = 'dsh-cortex'
+/** 通知标题（macOS 横幅显示）。产品名即 cortex（启动命令也是 cortex）。 */
+const NOTIFY_TITLE = 'cortex'
 
 /** 摘要里问题正文的截断长度。 */
 const SUMMARY_LIMIT = 80

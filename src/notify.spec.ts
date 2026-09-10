@@ -50,7 +50,7 @@ describe('QuestionAlertTimer', () => {
 
     await vi.advanceTimersByTimeAsync(QUESTION_ALERT_DELAY_MS + 10)
     expect(fired).toHaveBeenCalledTimes(1)
-    expect(fired).toHaveBeenCalledWith('dsh-cortex', '继续吗？')
+    expect(fired).toHaveBeenCalledWith('cortex', '继续吗？')
     expect(timer.pending).toBe(false)
   })
 

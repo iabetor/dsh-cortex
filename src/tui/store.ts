@@ -52,6 +52,10 @@ export interface CortexUiState {
   model: string
   /** Current cwd display. */
   cwd: string
+  /** Current sandbox/permission mode; shown in the status bar. */
+  sandboxMode: string
+  /** Current reasoning effort (e.g. low/medium/high/xhigh/max); '' when unset. */
+  effort: string
   /** Whether reasoning summaries are expanded to full text (Ctrl+O). */
   showReasoning: boolean
   /** Active picker overlay (model catalog etc.); null when none. */
@@ -73,6 +77,8 @@ const initialState: CortexUiState = {
   busy: false,
   model: '',
   cwd: '',
+  sandboxMode: '',
+  effort: '',
   showReasoning: false,
   picker: null,
   viewer: null,
@@ -264,15 +270,37 @@ export class CortexStore {
     this.setActive('', 'idle')
   }
 
-  /** Set model/cwd display in the status bar. */
-  setStatusBar(model: string, cwd: string): void {
-    this.state = { ...this.state, model, cwd }
+  /** Set model/cwd/permission/effort display in the status bar. */
+  setStatusBar(
+    model: string,
+    cwd: string,
+    extras: { sandboxMode?: string; effort?: string } = {},
+  ): void {
+    this.state = {
+      ...this.state,
+      model,
+      cwd,
+      ...(extras.sandboxMode === undefined ? {} : { sandboxMode: extras.sandboxMode }),
+      ...(extras.effort === undefined ? {} : { effort: extras.effort }),
+    }
     this.notify()
   }
 
   /** Update the model display (after /model switch). */
   setModel(model: string): void {
     this.state = { ...this.state, model }
+    this.notify()
+  }
+
+  /** Update the permission mode display (after /full, /restrict, /readonly). */
+  setSandboxMode(mode: string): void {
+    this.state = { ...this.state, sandboxMode: mode }
+    this.notify()
+  }
+
+  /** Update the reasoning-effort display (after /effort). */
+  setEffort(effort: string): void {
+    this.state = { ...this.state, effort }
     this.notify()
   }
 

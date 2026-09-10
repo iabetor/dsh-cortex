@@ -92,6 +92,16 @@ function CommittedRow({ line }: { line: CommittedLine }): React.JSX.Element {
 /** Spinner glyphs (braille) driven by ink's animation frame. */
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
+/** 状态栏里的权限模式短标签（简体中文）。 */
+function sandboxLabel(mode: string): string {
+  switch (mode) {
+    case 'read-only': return '只读'
+    case 'danger-full-access': return '⚠ 完全权限'
+    case 'workspace-write': return '工作区可写'
+    default: return mode
+  }
+}
+
 /** Animated "thinking" indicator for the live reasoning line. */
 function ThinkingSpinner(props: { verbose: boolean; text: string }): React.JSX.Element {
   const { verbose, text } = props
@@ -247,6 +257,20 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
       {overlay === null && (
         <Box flexShrink={0} borderStyle="single" borderColor="cyan" paddingX={1}>
           <Text color="cyan" bold>{state.model || 'no model'}</Text>
+          {state.effort !== '' && (
+            <>
+              <Text dimColor> · </Text>
+              <Text color="cyan">effort: {state.effort}</Text>
+            </>
+          )}
+          {state.sandboxMode !== '' && (
+            <>
+              <Text dimColor> · </Text>
+              <Text color={state.sandboxMode === 'danger-full-access' ? 'yellow' : 'cyan'}>
+                {sandboxLabel(state.sandboxMode)}
+              </Text>
+            </>
+          )}
           <Text dimColor> · </Text>
           <Text color="cyan" dimColor>{state.cwd || '~'}</Text>
           {state.busy && <Text color="yellow">{' ⏳'}</Text>}

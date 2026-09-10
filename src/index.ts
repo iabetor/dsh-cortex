@@ -196,8 +196,11 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
     return decision.outcome
   })
 
-  // Set the status bar (model + cwd).
-  store.setStatusBar(agent.options.model ?? 'unknown', cwd)
+  // Set the status bar (model + cwd + permission + effort).
+  store.setStatusBar(agent.options.model ?? 'unknown', cwd, {
+    sandboxMode: currentSandboxMode(agent),
+    effort: agent.options.reasoningEffort ?? '',
+  })
 
   // When resuming, load the persisted conversation into the committed transcript.
   if (resumeId !== undefined) {
@@ -374,6 +377,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
           try {
             const resolved = await switchModel(ctx, agent, model, level)
             note(`已切换 effort 到 ${resolved.reasoningEffort ?? level}`)
+            store.setEffort(resolved.reasoningEffort ?? level)
           } catch (error) {
             note(`/effort 切换失败: ${error instanceof Error ? error.message : String(error)}`)
           }
@@ -405,18 +409,21 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
         // no sandbox) for subsequent bash/fs calls.
         switchSandboxMode(agent, 'danger-full-access')
         note('⚠️ 已切换到完全权限 (danger-full-access) — 后续 bash/文件操作不再受限')
+        store.setSandboxMode('danger-full-access')
         break
       }
       case 'restrict': {
         // Drop back to the safe workspace-write sandbox.
         switchSandboxMode(agent, 'workspace-write')
         note('已切换回 workspace-write（仅当前工作区可写）')
+        store.setSandboxMode('workspace-write')
         break
       }
       case 'readonly': {
         // Read-only: bash/fs can read anywhere but cannot write.
         switchSandboxMode(agent, 'read-only')
         note('已切换为 read-only（只读，禁止任何写入）')
+        store.setSandboxMode('read-only')
         break
       }
       case 'perm': {

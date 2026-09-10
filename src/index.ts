@@ -45,6 +45,11 @@ export interface Config {
   last: boolean
   /** Open the resume picker. */
   pick: boolean
+  /**
+   * Run inline instead of the alternate screen, keeping TUI rows in the normal
+   * scrollback after exit (--no-alt-screen; default false = use alt screen).
+   */
+  noAltScreen: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -52,6 +57,7 @@ export const Config: z<Config> = z.object({
   resume: z.string().default(''),
   last: z.boolean().default(false),
   pick: z.boolean().default(false),
+  noAltScreen: z.boolean().default(false),
 })
 
 /** Process-facing effects of one run: output streams plus exit request. */
@@ -91,6 +97,7 @@ export function apply(ctx: Context, config: Config): void {
       resume: config.resume === '' ? undefined : config.resume,
       last: config.last === true,
       pick: config.pick === true,
+      noAltScreen: config.noAltScreen === true,
     })
   })().catch((error: unknown) => {
     io.stderr.write(`dsh-cortex: ${error instanceof Error ? error.message : String(error)}\n`)
@@ -119,6 +126,8 @@ interface ReplSessionChoice {
   resume?: string | undefined
   last?: boolean
   pick?: boolean
+  /** Run inline instead of the alternate screen (--no-alt-screen). */
+  noAltScreen?: boolean
 }
 
 /**
@@ -159,7 +168,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
             instance.unmount()
             resolve(result)
           },
-        }))
+        }), { alternateScreen: choice.noAltScreen !== true })
       })
     }
   }
@@ -214,9 +223,18 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
   }
 
   let exiting = false
+  /**
+   * The mounted ink app, captured so exit can unmount it first. ink only emits
+   * the "leave alternate screen" escape during unmount, and this runner exits
+   * with process.exit, which would otherwise strand the terminal in the
+   * alternate buffer (the vim-style page would never restore).
+   */
+  let tuiInstance: { unmount: () => void } | null = null
   const doExit = (): void => {
     if (exiting) return
     exiting = true
+    // Restore the primary screen buffer before the process ends.
+    try { tuiInstance?.unmount() } catch { /* teardown must not block exit */ }
     // Safety net: if this session already carries user input but was never
     // bound (e.g. an interrupted turn before the attach landed), bind it now
     // so quitting never leaves a used session ungrouped. Empty sessions are
@@ -510,7 +528,10 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
     })()
   }
 
-  render(React.createElement(CortexApp, {
+  // Alternate screen (like vim/codex/claude): entering swaps to a fresh
+  // terminal page and leaving restores whatever was on screen before. Pass
+  // --no-alt-screen to stay inline and keep the rows in the normal scrollback.
+  tuiInstance = render(React.createElement(CortexApp, {
     store,
     onSubmit,
     onSteer,
@@ -518,5 +539,5 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
     onPickResult,
     onCancel,
     onExit: doExit,
-  }))
+  }), { alternateScreen: choice.noAltScreen !== true })
 }

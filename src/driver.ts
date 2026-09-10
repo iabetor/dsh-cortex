@@ -70,6 +70,19 @@ function currentModelSelection(ctx: Context): ModelSelectionRef['current'] & {} 
   return selection
 }
 
+/**
+ * Read the current reasoning effort safely — never throws.
+ * Returns undefined when the service is unavailable or no effort is set, so
+ * callers (e.g. the status bar) can simply hide the field instead of crashing.
+ */
+export function currentReasoningEffort(ctx: Context): string | undefined {
+  try {
+    return currentModelSelection(ctx).reasoningEffort
+  } catch {
+    return undefined
+  }
+}
+
 /** One question the agent asks the user (ask_user_question tool). */
 export interface QuestionItem {
   id: string

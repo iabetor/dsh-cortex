@@ -24,7 +24,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { openAgent, runTurn, steerTurn, flushSession, listModels, switchModel, switchSandboxMode, currentSandboxMode, attachToWorkspace, installQuestionAnswerer, installApprovalAnswerer, cancelTurn } from './driver.ts'
+import { openAgent, runTurn, steerTurn, flushSession, listModels, switchModel, switchSandboxMode, currentSandboxMode, currentReasoningEffort, attachToWorkspace, installQuestionAnswerer, installApprovalAnswerer, cancelTurn } from './driver.ts'
 import type { QuestionItem, QuestionAnswer, ApprovalRequest, ApprovalOutcome } from './driver.ts'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { CortexEvent } from './driver.ts'
@@ -203,7 +203,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
   // Set the status bar (model + cwd + permission + effort).
   store.setStatusBar(agent.options.model ?? 'unknown', cwd, {
     sandboxMode: currentSandboxMode(agent),
-    effort: agent.options.reasoningEffort ?? '',
+    effort: currentReasoningEffort(ctx) ?? '',
   })
 
   // When resuming, load the persisted conversation into the committed transcript.

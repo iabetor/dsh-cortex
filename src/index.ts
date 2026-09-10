@@ -106,6 +106,10 @@ async function runOneShot(ctx: Context, task: string, io: CortexIo): Promise<voi
   }
   await runTurn(ctx, agent, task, emit)
   await flushSession(ctx, agent)
+  // One-shot tasks are exactly the case that should be grouped: the cwd is a
+  // real workspace and the session has produced content by now. The lazy REPL
+  // attach below never runs in this path.
+  await attachToWorkspace(ctx, agent.session.id).catch(() => { /* non-fatal */ })
   io.stdout.write(finalText + '\n')
 }
 
@@ -216,6 +220,10 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
     const timer = setTimeout(() => { io.exit(0) }, 3000)
     void flush
       .catch(() => { /* flush failure must not block exit */ })
+      // Wait for the lazy workspace attach so the session is grouped before
+      // the process ends (previously it could be dropped on a quick /quit).
+      .then(async () => { await pendingAttach })
+      .catch(() => { /* attach failure must not block exit */ })
       .finally(() => { clearTimeout(timer); io.exit(0) })
   }
 
@@ -266,6 +274,8 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
   }
 
   let attachedWorkspace = false
+  /** Pending lazy attach; awaited on exit so the binding is never lost. */
+  let pendingAttach: Promise<void> | null = null
   const startTurn = (text: string): void => {
     turnRunning = true
     store.beginTurn(text)
@@ -277,7 +287,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
         // content (new sessions). Empty throwaway sessions never attach.
         if (!attachedWorkspace && resumeId === undefined) {
           attachedWorkspace = true
-          void attachToWorkspace(ctx, agent.session.id).catch(() => { /* non-fatal */ })
+          pendingAttach = attachToWorkspace(ctx, agent.session.id).catch(() => { /* non-fatal */ })
         }
         // Auto-send the next queued input, one at a time.
         const next = pendingQueue.shift()

@@ -503,7 +503,8 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
         break
       }
       case 'help': {
-        note('commands: /model [name|编号|关键字], /effort [level], /image <path>, /bash [关键字], /perm, /readonly, /restrict, /full, /quit')
+        // Full-screen reference panel (commands + keybindings), scrollable.
+        store.openHelp()
         break
       }
       default: {

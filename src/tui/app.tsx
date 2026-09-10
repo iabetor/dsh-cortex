@@ -36,6 +36,7 @@ import { PagerOverlay } from './pager.tsx'
 import { TranscriptOverlay } from './transcript-overlay.tsx'
 import { QuestionOverlay } from './question-overlay.tsx'
 import { ApprovalOverlay } from './approval-overlay.tsx'
+import { HelpOverlay } from './help-overlay.tsx'
 
 /** Props for the root TUI app. */
 export interface CortexAppProps {
@@ -189,8 +190,15 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
       || s.transcriptOverlay !== null
       || s.viewer !== null
       || s.picker !== null
+      || s.helpOpen
     if (overlayOpen) {
       void inputChar
+      return
+    }
+    // `?` opens the help panel when the draft is empty (so a literal question
+    // mark in a message still types normally).
+    if (inputChar === '?' && inputRef.current.trim() === '') {
+      store.openHelp()
       return
     }
     // Escape cancels the running turn (no-op when idle).
@@ -300,7 +308,9 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
                 onPick={(key) => { store.closePicker(); onPickResult(key) }}
               />
             )
-            : null
+            : state.helpOpen
+              ? <HelpOverlay onClose={() => store.closeHelp()} />
+              : null
 
   // <Static> sits at a fixed tree position in BOTH branches so it never
   // unmounts across overlay open/close (unmounting resets its internal index

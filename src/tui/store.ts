@@ -74,6 +74,8 @@ export interface CortexUiState {
   approval: ApprovalRequest | null
   /** Inputs queued while a turn runs; rendered just above the input box. */
   queuedInputs: string[]
+  /** Whether the full-screen help panel (/help or ?) is open. */
+  helpOpen: boolean
 }
 
 const initialState: CortexUiState = {
@@ -94,6 +96,7 @@ const initialState: CortexUiState = {
   questions: null,
   approval: null,
   queuedInputs: [],
+  helpOpen: false,
 }
 
 /**
@@ -403,6 +406,18 @@ export class CortexStore {
   /** Close the full-screen text viewer. */
   closeViewer(): void {
     this.state = { ...this.state, viewer: null }
+    this.notify()
+  }
+
+  /** Open the full-screen help panel (/help or ?). */
+  openHelp(): void {
+    this.state = { ...this.state, helpOpen: true }
+    this.notify()
+  }
+
+  /** Close the help panel. */
+  closeHelp(): void {
+    this.state = { ...this.state, helpOpen: false }
     this.notify()
   }
 

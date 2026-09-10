@@ -15,6 +15,7 @@
 import type { CortexEvent, QuestionItem, QuestionAnswer, ApprovalRequest, ApprovalOutcome } from '../driver.ts'
 import type { Message } from '@deepseek-ai/dsh-llm'
 import type { OverlayLine } from './transcript-overlay.tsx'
+import { QuestionAlertTimer } from '../notify.ts'
 
 /** One line in the transcript. Lines are rendered in a scroll viewport and
  * can carry optional expandable full content (reasoning or tool output). */
@@ -407,6 +408,8 @@ export class CortexStore {
   // ---- ask_user_question (terminal question cards) ----
 
   private questionResolve: ((answer: QuestionAnswer) => void) | null = null
+  /** 提问提醒计时器：超时未答则发 macOS 系统通知（见 notify.ts）。 */
+  private readonly questionAlert = new QuestionAlertTimer()
 
   /** Park agent questions and wait for the TUI's human answer. */
   askQuestions(items: QuestionItem[]): Promise<QuestionAnswer> {
@@ -414,6 +417,8 @@ export class CortexStore {
     this.questionResolve = null
     this.state = { ...this.state, questions: items }
     this.notify()
+    // 用户若已离开终端，超时后提醒；在终端前通常会立即作答，不会被打扰。
+    this.questionAlert.start(items)
     return new Promise<QuestionAnswer>((resolve) => {
       this.questionResolve = resolve
     })
@@ -421,6 +426,8 @@ export class CortexStore {
 
   /** UI calls this when the human answered the parked questions. */
   answerQuestion(answer: QuestionAnswer): void {
+    // 已作答 → 取消待触发的提醒。
+    this.questionAlert.cancel()
     const resolve = this.questionResolve
     this.questionResolve = null
     this.state = { ...this.state, questions: null }

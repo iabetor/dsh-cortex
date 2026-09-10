@@ -29,6 +29,7 @@ import type { QuestionItem, QuestionAnswer, ApprovalRequest, ApprovalOutcome } f
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { CortexEvent } from './driver.ts'
 import { CortexStore } from './tui/store.ts'
+import { InputQueue } from './input-queue.ts'
 import { listSessionsForCwd } from './sessions.ts'
 
 /** Stable Cordis plugin name. */
@@ -241,10 +242,10 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
     store.apply({ kind: 'system', message: '⏹ 已取消当前回合' })
   }
 
-  // Input model (user-confirmed): with a typed draft,
-  //   Enter = queue when busy (auto-send after this turn), direct send when idle
-  //   Tab   = steer into the running turn when busy, direct send when idle
-  const pendingQueue: string[] = []
+  // Input model (codex-aligned): with a typed draft,
+  //   Enter = steer into the running turn when busy, direct send when idle
+  //   Tab   = queue for the next turn when busy, direct send when idle
+  const pendingQueue = new InputQueue()
   let turnRunning = false
 
   const isBusy = (): boolean => store.snapshot().busy || turnRunning
@@ -253,13 +254,9 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
    *  The queue is mirrored into UI state so it renders next to the input box
    *  instead of scrolling away in the transcript. */
   const queueInput = (text: string): void => {
-    pendingQueue.push(text)
-    store.setQueuedInputs(pendingQueue)
-    if (!isBusy()) {
-      const next = pendingQueue.shift()
-      store.setQueuedInputs(pendingQueue)
-      if (next !== undefined) startTurn(next)
-    }
+    const { startNow } = pendingQueue.push(text, isBusy())
+    store.setQueuedInputs(pendingQueue.list())
+    if (startNow !== undefined) startTurn(startNow)
   }
 
   /** Enter (submit): idle → new turn; busy → steer into the running turn.
@@ -309,9 +306,10 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
       .catch((error: unknown) => emit({ kind: 'error', message: error instanceof Error ? error.message : String(error) }))
       .finally(() => {
         turnRunning = false
-        // Auto-send the next queued input, one at a time.
-        const next = pendingQueue.shift()
-        store.setQueuedInputs(pendingQueue)
+        // A settled turn releases exactly one queued line, which then starts
+        // its own turn; that turn's finally drains the next one, and so on.
+        const next = pendingQueue.releaseNext()
+        store.setQueuedInputs(pendingQueue.list())
         if (next !== undefined) startTurn(next)
       })
   }
@@ -424,12 +422,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
         note(`📷 图片: ${imgPath}`)
         // Send as a user turn with an instruction to read the image.
         const imgText = `Please use the read_image tool to read the image at "${imgPath}" and analyze it.`
-        if (isBusy()) {
-          pendingQueue.push(imgText)
-          store.setQueuedInputs(pendingQueue)
-          return
-        }
-        startTurn(imgText)
+        queueInput(imgText)
         break
       }
       case 'full': {

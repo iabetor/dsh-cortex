@@ -5,6 +5,9 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
+  "bin": {
+    "cortex": "bin/cortex.js"
+  },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -17,6 +20,7 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "bin/cortex.js",
     "lib/index.js",
     "lib/startup.js",
     "lib/index.d.ts",

@@ -56,8 +56,6 @@ export interface CortexUiState {
   showReasoning: boolean
   /** Active picker overlay (model catalog etc.); null when none. */
   picker: { title: string; items: { key: string; label: string; hint?: string }[] } | null
-  /** Cursor index into `committed` for ↑↓ navigation (null = no cursor). */
-  cursorIndex: number | null
   /** Full-screen text viewer (e.g. /bash output); null when closed. */
   viewer: { title: string; lines: string[] } | null
   /** Interactive transcript overlay (Ctrl+O); null when closed. */
@@ -77,7 +75,6 @@ const initialState: CortexUiState = {
   cwd: '',
   showReasoning: false,
   picker: null,
-  cursorIndex: null,
   viewer: null,
   transcriptOverlay: null,
   questions: null,
@@ -93,8 +90,6 @@ export class CortexStore {
   private state: CortexUiState = { ...initialState }
   private listeners = new Set<() => void>()
   private nextId = 1
-  /** Full text of the most recent reasoning block, for expand-on-toggle. */
-  private lastReasoningFull = ''
 
   /** Snapshot of current state. */
   snapshot(): CortexUiState {
@@ -269,7 +264,6 @@ export class CortexStore {
     this.setActive('', 'idle')
   }
 
-
   /** Set model/cwd display in the status bar. */
   setStatusBar(model: string, cwd: string): void {
     this.state = { ...this.state, model, cwd }
@@ -287,7 +281,6 @@ export class CortexStore {
    *  finished turn's thinking is always reviewable in place. */
   private commitReasoning(fullText: string): void {
     if (fullText === '') return
-    this.lastReasoningFull = fullText
     this.commit('reasoning', fullText, fullText)
   }
 
@@ -300,23 +293,6 @@ export class CortexStore {
     this.notify()
   }
 
-  /** Expand or collapse ALL tool rows at once (Tab). Returns whether any
-   *  tool output is now visible. */
-  toggleAllTools(): boolean {
-    const tools = this.state.committed.filter(line => line.kind === 'tool' && line.fullText !== undefined && line.fullText !== '')
-    if (tools.length === 0) return false
-    const anyExpanded = tools.some(line => line.expanded === true)
-    const expanded = !anyExpanded // flip: expand if none expanded, else collapse
-    const committed = this.state.committed.map(line =>
-      line.kind === 'tool' && line.fullText !== undefined && line.fullText !== ''
-        ? { ...line, expanded }
-        : line,
-    )
-    this.state = { ...this.state, committed }
-    this.notify()
-    return expanded
-  }
-
   /** Toggle expand/collapse of a line by its committed id (tool output /
    *  reasoning body). */
   toggleLine(id: number): void {
@@ -327,21 +303,6 @@ export class CortexStore {
     )
     this.state = { ...this.state, committed }
     this.notify()
-  }
-
-  /** Move the transcript cursor by delta; null cursor starts at bottom. */
-  moveCursor(delta: number): void {
-    const len = this.state.committed.length
-    if (len === 0) return
-    const base = this.state.cursorIndex ?? len - 1
-    const next = Math.min(len - 1, Math.max(0, base + delta))
-    this.state = { ...this.state, cursorIndex: next }
-    this.notify()
-  }
-
-  /** Whether verbose reasoning display is on. */
-  reasoningExpanded(): boolean {
-    return this.state.showReasoning
   }
 
   /** All tool rows in transcript order: {name, command, output} — for

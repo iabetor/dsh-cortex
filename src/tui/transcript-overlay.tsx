@@ -2,7 +2,7 @@
  * dsh-cortex transcript overlay — full-screen interactive viewer for the
  * committed transcript (Ctrl+O). Mirrors codex's Ctrl+T pager: self-managed
  * row offset, render only the visible slice, Enter expands/collapses a tool
- * output or reasoning block in place.
+ * output block in place.
  *
  * @module dsh-cortex/tui/transcript-overlay
  */
@@ -68,7 +68,7 @@ function rowLines(line: OverlayLine, width: number): string[] {
         const hint = line.fullText !== undefined && line.fullText !== '' ? '  [Enter 展开输出]' : ''
         return splitText(`${head}${hint}`, width)
       }
-      const out: string[] = splitText(head, width)
+      const out: string[] = splitText(`${head}  [Enter 收起]`, width)
       if (line.fullText !== undefined && line.fullText !== '') {
         out.push(...splitText(line.fullText, width))
       } else {
@@ -83,7 +83,7 @@ function rowLines(line: OverlayLine, width: number): string[] {
 
 /**
  * Full-screen transcript viewer: ↑/↓ move the row cursor (auto-scrolling to
- * keep it visible), Enter expands/collapses tool output or reasoning, PgUp/
+ * keep it visible), Enter expands/collapses tool output, PgUp/
  * PgDn page, q/Esc closes.
  */
 export function TranscriptOverlay(props: TranscriptOverlayProps): React.JSX.Element {
@@ -206,7 +206,7 @@ export function TranscriptOverlay(props: TranscriptOverlayProps): React.JSX.Elem
       <Box>
         <Text color="cyan" bold>会话内容</Text>
         <Text dimColor>  ({lines.length} 块, {totalLines} 行, {percent}%)</Text>
-        <Text dimColor>  ↑/↓ 选行 · Enter 展开 · PgUp/PgDn 翻页 · Ctrl+O verbose · q 退出</Text>
+        <Text dimColor>  ↑/↓ 选行 · Enter 展开工具输出 · PgUp/PgDn 翻页 · Ctrl+O verbose · q 退出</Text>
       </Box>
       <Box flexDirection="column" flexGrow={1} overflowY="hidden">
         {visible.map(({ row }) => {

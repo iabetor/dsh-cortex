@@ -428,7 +428,6 @@ function formatToolArgs(toolName: string, argsJson: string): string {
   }
 }
 
-/** Format a tool result into a short summary for display. */
 /** Recursively collect text from a content block tree (tool results nest:
  * tool-result → content[] → text). */
 function collectTextFromBlocks(blocks: readonly unknown[], out: string[]): void {

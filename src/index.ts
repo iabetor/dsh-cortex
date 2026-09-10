@@ -7,7 +7,7 @@
  *  - one-shot mode: `dsh --profile cortex "<task>"` runs the task, prints the
  *    answer, and exits.
  *  - REPL mode (no task): a full-screen ink TUI with a scrolling conversation
- *    pane, detailed tool log, and a bottom input; `/quit` exits, Ctrl+C
+ *    pane, detailed tool log, and a bottom input; `/quit` exits, Escape
  *    cancels the running turn.
  *
  * Session lifecycle (codex-style, grouped by cwd):
@@ -24,7 +24,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { openAgent, runTurn, steerTurn, flushSession, listModels, switchModel, switchSandboxMode, currentSandboxMode, attachToWorkspace, installQuestionAnswerer, installApprovalAnswerer } from './driver.ts'
+import { openAgent, runTurn, steerTurn, flushSession, listModels, switchModel, switchSandboxMode, currentSandboxMode, attachToWorkspace, installQuestionAnswerer, installApprovalAnswerer, cancelTurn } from './driver.ts'
 import type { QuestionItem, QuestionAnswer, ApprovalRequest, ApprovalOutcome } from './driver.ts'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { CortexEvent } from './driver.ts'
@@ -214,6 +214,13 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
     void flush
       .catch(() => { /* flush failure must not block exit */ })
       .finally(() => { clearTimeout(timer); io.exit(0) })
+  }
+
+  /** Cancel the running turn (Escape); no-op when idle. Keeps queued inputs. */
+  const onCancel = (): void => {
+    if (!isBusy()) return
+    cancelTurn(agent)
+    store.apply({ kind: 'system', message: '⏹ 已取消当前回合' })
   }
 
   // Input model (user-confirmed): with a typed draft,
@@ -481,30 +488,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
     onSteer,
     onCommand,
     onPickResult,
+    onCancel,
     onExit: doExit,
   }))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}
-
-/** Short session label for display. */
-function shortId(id: string): string {
-  return id.length <= 24 ? id : `${id.slice(0, 23)}…`
 }

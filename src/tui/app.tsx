@@ -46,6 +46,8 @@ export interface CortexAppProps {
   onCommand: (cmd: string, args: string) => void
   /** Picker overlay selection result (key or undefined on cancel). */
   onPickResult: (key: string | undefined) => void
+  /** Cancel the running turn (Escape while busy). */
+  onCancel: () => void
   /** User requested exit. */
   onExit: () => void
 }
@@ -106,7 +108,7 @@ function ThinkingSpinner(props: { verbose: boolean; text: string }): React.JSX.E
  * Root ink app: status bar + committed transcript (Static) + active line + input.
  */
 export function CortexApp(props: CortexAppProps): React.JSX.Element {
-  const { store, onSubmit, onSteer, onCommand, onPickResult, onExit } = props
+  const { store, onSubmit, onSteer, onCommand, onPickResult, onCancel, onExit } = props
   const subscribe = useRef(store.subscribe.bind(store)).current
   const getSnapshot = useRef(() => store.snapshot()).current
   const state = useSyncExternalStore(subscribe, getSnapshot)
@@ -118,8 +120,22 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
   exitRef.current = onExit
 
   useInput((inputChar, key) => {
+    // Any full-screen overlay owns the keyboard while open; global chords
+    // (Escape cancel, Ctrl+O, Tab steer) must not fire underneath it.
+    const s = store.snapshot()
+    const overlayOpen = s.questions !== null && s.questions.length > 0
+      || s.approval !== null
+      || s.transcriptOverlay !== null
+      || s.viewer !== null
+      || s.picker !== null
+    if (overlayOpen) {
+      void inputChar
+      return
+    }
+    // Escape cancels the running turn (no-op when idle).
     if (key.escape) {
-      // Future: cancel running turn.
+      onCancel()
+      return
     }
     // Ctrl+O opens the interactive transcript overlay (all tool outputs and
     // reasoning, expandable per row). Shift+Ctrl+O or a second Ctrl+O from
@@ -236,7 +252,7 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
           {state.busy && <Text color="yellow">{' ⏳'}</Text>}
           <Text dimColor>  </Text>
           <Text color="gray" dimColor>
-            ctrl+o: 查看全部工具/思考
+            {state.busy ? 'esc: 取消 · ' : ''}ctrl+o: 查看全部工具/思考
           </Text>
         </Box>
       )}

@@ -48,6 +48,10 @@ export interface CortexUiState {
   activeKind: 'reasoning' | 'text' | 'idle'
   /** Whether the agent is working. */
   busy: boolean
+  /** Start timestamp (ms) of the running turn; null when idle. */
+  turnStartedAt: number | null
+  /** Duration (ms) of the last completed turn; null before the first turn. */
+  lastTurnMs: number | null
   /** Current model display name. */
   model: string
   /** Current cwd display. */
@@ -75,6 +79,8 @@ const initialState: CortexUiState = {
   activeText: '',
   activeKind: 'idle',
   busy: false,
+  turnStartedAt: null,
+  lastTurnMs: null,
   model: '',
   cwd: '',
   sandboxMode: '',
@@ -240,8 +246,7 @@ export class CortexStore {
           this.commit('assistant', event.text)
         }
         this.setActive('', 'idle')
-        this.state = { ...this.state, busy: false }
-        this.notify()
+        this.settleTurn()
         break
       }
       case 'system': {
@@ -252,22 +257,41 @@ export class CortexStore {
       case 'error': {
         this.commit('system', `error: ${event.message}`)
         this.setActive('', 'idle')
-        this.state = { ...this.state, busy: false }
-        this.notify()
+        this.settleTurn()
         break
       }
     }
   }
 
-  /** Mark a user turn as started (busy on, commit the user line). */
+  /** Mark a user turn as started (busy on, commit the user line, start the clock). */
   beginTurn(text: string): void {
     // Insert a separator before a new user turn if there's already history.
     if (this.state.committed.length > 0) {
       this.commit('separator', '')
     }
     this.commit('user', text)
-    this.state = { ...this.state, busy: true }
+    this.state = {
+      ...this.state,
+      busy: true,
+      turnStartedAt: Date.now(),
+      lastTurnMs: null,
+    }
     this.setActive('', 'idle')
+  }
+
+  /**
+   * Settle a finished turn: record how long it took and clear busy.
+   * The duration stays in `lastTurnMs` so the status bar can show it while idle.
+   */
+  private settleTurn(): void {
+    const startedAt = this.state.turnStartedAt
+    this.state = {
+      ...this.state,
+      busy: false,
+      turnStartedAt: null,
+      ...(startedAt === null ? {} : { lastTurnMs: Date.now() - startedAt }),
+    }
+    this.notify()
   }
 
   /** Set model/cwd/permission/effort display in the status bar. */

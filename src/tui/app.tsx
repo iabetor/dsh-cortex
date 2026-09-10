@@ -24,7 +24,7 @@
  * @module dsh-cortex/tui/app
  */
 
-import React, { useRef, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Box, Static, Text, useAnimation, useApp, useInput } from 'ink'
 import { CortexTextInput } from './text-input.tsx'
 import type { CortexStore } from './store.ts'
@@ -102,6 +102,15 @@ function sandboxLabel(mode: string): string {
   }
 }
 
+/** 状态栏里的耗时展示：毫秒 → 人类可读（不足 1 分钟用秒，超过用 分:秒）。 */
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 100) ) / 10
+  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = Math.round(totalSeconds % 60)
+  return `${minutes}m${String(seconds).padStart(2, '0')}s`
+}
+
 /** Animated "thinking" indicator for the live reasoning line. */
 function ThinkingSpinner(props: { verbose: boolean; text: string }): React.JSX.Element {
   const { verbose, text } = props
@@ -128,6 +137,19 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
   const { exit } = useApp()
   const exitRef = useRef(onExit)
   exitRef.current = onExit
+
+  // Turn duration: tick once per second while a turn runs, so the status-bar
+  // timer actually advances (the store only notifies on events, not on time).
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!state.busy) return
+    setNow(Date.now())
+    const timer = setInterval(() => { setNow(Date.now()) }, 1000)
+    return () => { clearInterval(timer) }
+  }, [state.busy])
+  const turnElapsed = state.busy
+    ? (state.turnStartedAt === null ? null : now - state.turnStartedAt)
+    : state.lastTurnMs
 
   useInput((inputChar, key) => {
     // Any full-screen overlay owns the keyboard while open; global chords
@@ -268,6 +290,14 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
               <Text dimColor> · </Text>
               <Text color={state.sandboxMode === 'danger-full-access' ? 'yellow' : 'cyan'}>
                 {sandboxLabel(state.sandboxMode)}
+              </Text>
+            </>
+          )}
+          {turnElapsed !== null && (
+            <>
+              <Text dimColor> · </Text>
+              <Text color={state.busy ? 'yellow' : 'cyan'} dimColor={!state.busy}>
+                ⏱ {formatDuration(turnElapsed)}
               </Text>
             </>
           )}

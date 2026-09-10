@@ -28,6 +28,7 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Box, Static, Text, useAnimation, useApp, useInput, useStdout } from 'ink'
 import stringWidth from 'string-width'
 import { CortexTextInput } from './text-input.tsx'
+import { DraftHistory } from './history.ts'
 import type { CortexStore } from './store.ts'
 import type { CommittedLine } from './store.ts'
 import { PickerOverlay } from './picker-overlay.tsx'
@@ -152,6 +153,9 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
   const getSnapshot = useRef(() => store.snapshot()).current
   const state = useSyncExternalStore(subscribe, getSnapshot)
   const [input, setInput] = useState('')
+  // Shell-style draft history (Up/Down recall); one instance for the session.
+  const historyRef = useRef<DraftHistory | null>(null)
+  historyRef.current ??= new DraftHistory()
   const inputRef = useRef(input)
   inputRef.current = input
   const { exit } = useApp()
@@ -221,6 +225,10 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
     const trimmed = line.trim()
     if (trimmed === '') return
     setInput('')
+    // Recall history always restarts from a submitted line (codex resets its
+    // browse cursor on submit), and the line itself becomes recallable.
+    historyRef.current?.reset()
+    historyRef.current?.record(trimmed)
 
     // Slash commands.
     if (trimmed.startsWith('/')) {
@@ -405,6 +413,7 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
               value={input}
               onChange={setInput}
               onSubmit={handleSubmit}
+              history={historyRef.current}
               placeholder={state.busy ? 'agent running — Enter 插入当前回合 · Tab 排队' : 'type a message… (/model, /quit, Ctrl+O 查看)'}
               focus
             />

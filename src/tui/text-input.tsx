@@ -15,6 +15,18 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput, usePaste, useStdout } from 'ink'
 import chalk from 'chalk'
 import stringWidth from 'string-width'
+import {
+  deleteBackward,
+  deleteBackwardWord,
+  deleteForward,
+  deleteForwardWord,
+  insertAt,
+  killToLineEnd,
+  killToLineStart,
+  moveLineEnd,
+  moveLineStart,
+} from './editing.ts'
+import type { DraftHistory } from './history.ts'
 
 /** Props mirroring ink-text-input. */
 export interface CortexTextInputProps {
@@ -32,6 +44,17 @@ export interface CortexTextInputProps {
    * mis-measures its height, clipping every wrapped row.
    */
   width?: number
+  /**
+   * Shell-style draft history for Up/Down recall. The caller owns the instance
+   * so entries survive across submits; omit to disable history recall.
+   */
+  history?: DraftHistory
+  /**
+   * Called with the submitted draft so the caller can record it in `history`.
+   * The input component never records on its own: only the caller knows whether
+   * a draft was actually accepted.
+   */
+  onSubmitted?: (value: string) => void
 }
 
 /** Display width of one string (CJK/emoji count double). */
@@ -72,6 +95,69 @@ function wrapByWidth(text: string, width: number): string[] {
 }
 
 /**
+ * Map a Ctrl/Meta chord to a readline-style edit, mirroring codex's editor
+ * keymap (`keymap.rs`). Returning `undefined` means "not an editing chord", so
+ * the caller can leave the key to the app shell.
+ *
+ * Note: ink reports Ctrl+<letter> with `input` set to the bare letter, so the
+ * chords are matched on `input` rather than a control character.
+ * @param input - the key's text payload (the bare letter for a ctrl chord).
+ * @param key - ink's modifier flags.
+ * @param value - current draft.
+ * @param cursor - current cursor offset.
+ * @returns the edited draft, or undefined when the chord is not an edit.
+ */
+function applyEditingChord(
+  input: string,
+  key: { ctrl: boolean; meta: boolean },
+  value: string,
+  cursor: number,
+): { value: string; cursor: number } | undefined {
+  // Ctrl+U / Ctrl+K — the "clear this line" pair (Ctrl+U is the quick way to
+  // drop a long draft: the cursor starts at the end, so it clears everything).
+  if (key.ctrl && !key.meta) {
+    switch (input) {
+      case 'u': return killToLineStart(value, cursor)
+      case 'k': return killToLineEnd(value, cursor)
+      case 'w': return deleteBackwardWord(value, cursor)
+      case 'a': return moveLineStart(value, cursor)
+      case 'e': return moveLineEnd(value, cursor)
+      case 'b': return { value, cursor: Math.max(0, cursor - 1) }
+      case 'f': return { value, cursor: Math.min(value.length, cursor + 1) }
+      case 'h': return deleteBackward(value, cursor)
+      case 'd': return deleteForward(value, cursor)
+      default: return undefined
+    }
+  }
+  // Alt/Meta chords: word-wise edits and word movement.
+  if (key.meta && !key.ctrl) {
+    switch (input) {
+      case 'd': return deleteForwardWord(value, cursor)
+      case 'b': return { value, cursor: previousWordBoundary(value, cursor) }
+      case 'f': return { value, cursor: nextWordBoundary(value, cursor) }
+      default: return undefined
+    }
+  }
+  return undefined
+}
+
+/** Index of the word boundary before the cursor (Alt+B). */
+function previousWordBoundary(value: string, cursor: number): number {
+  let i = Math.max(0, Math.min(cursor, value.length))
+  while (i > 0 && /\s/.test(value[i - 1] as string)) i -= 1
+  while (i > 0 && !/\s/.test(value[i - 1] as string)) i -= 1
+  return i
+}
+
+/** Index of the word boundary after the cursor (Alt+F). */
+function nextWordBoundary(value: string, cursor: number): number {
+  let i = Math.max(0, Math.min(cursor, value.length))
+  while (i < value.length && /\s/.test(value[i] as string)) i += 1
+  while (i < value.length && !/\s/.test(value[i] as string)) i += 1
+  return i
+}
+
+/**
  * Single-line text input with ctrl/meta chord protection.
  */
 export function CortexTextInput(props: CortexTextInputProps): React.JSX.Element {
@@ -83,7 +169,9 @@ export function CortexTextInput(props: CortexTextInputProps): React.JSX.Element 
     showCursor = true,
     onChange,
     onSubmit,
+    onSubmitted,
     width,
+    history,
   } = props
 
   const { stdout } = useStdout()
@@ -154,20 +242,44 @@ export function CortexTextInput(props: CortexTextInputProps): React.JSX.Element 
   }, { isActive: focus })
 
   useInput((input, key) => {
-    // Reserved keys that upstream ignores.
-    if (key.upArrow || key.downArrow || (key.ctrl && input === 'c') || key.tab || (key.shift && key.tab)) {
+    // Ctrl+C and Tab belong to the app shell (cancel / queue / steer).
+    if ((key.ctrl && input === 'c') || key.tab || (key.shift && key.tab)) {
       return
     }
-    // KEY FIX: never treat ctrl/meta chords as text input. Without this,
-    // Ctrl+O (verbose reasoning) and Ctrl+E (expand tool card) would type
-    // "o"/"e" into the draft because ink reports their input as the letter.
-    if (key.ctrl || key.meta || key.escape) {
+
+    // Up/Down: shell-style history recall when the draft allows it (empty box,
+    // or continuing a recalled entry) — otherwise they are ordinary cursor
+    // movement, so multiline editing keeps working (codex's rule).
+    if (key.upArrow || key.downArrow) {
+      if (history === undefined || !showCursor) return
+      const step = key.upArrow
+        ? history.up(originalValue, cursorOffset)
+        : history.down(originalValue, cursorOffset)
+      if (!step.handled) return
+      setState({ cursorOffset: step.cursor, cursorWidth: 0 })
+      if (step.value !== originalValue) onChange(step.value)
       return
     }
+
     if (key.return) {
       if (onSubmit) onSubmit(originalValue)
+      onSubmitted?.(originalValue)
       return
     }
+
+    // Readline/Emacs editing chords, matching codex's editor keymap. These must
+    // be handled BEFORE the blanket ctrl/meta guard below (which exists only to
+    // stop Ctrl+O/Ctrl+E-style chords from typing their letter into the draft).
+    if (key.ctrl || key.meta) {
+      const chord = applyEditingChord(input, key, originalValue, cursorOffset)
+      if (chord !== undefined) {
+        setState({ cursorOffset: chord.cursor, cursorWidth: 0 })
+        if (chord.value !== originalValue) onChange(chord.value)
+        return
+      }
+      return
+    }
+    if (key.escape) return
 
     let nextCursorOffset = cursorOffset
     let nextValue = originalValue
@@ -178,18 +290,20 @@ export function CortexTextInput(props: CortexTextInputProps): React.JSX.Element 
     } else if (key.rightArrow) {
       if (showCursor) nextCursorOffset++
     } else if (key.backspace || key.delete) {
-      if (cursorOffset > 0) {
-        nextValue = originalValue.slice(0, cursorOffset - 1) + originalValue.slice(cursorOffset)
-        nextCursorOffset--
-      }
+      const result = key.delete && !key.backspace
+        ? deleteForward(originalValue, cursorOffset)
+        : deleteBackward(originalValue, cursorOffset)
+      nextValue = result.value
+      nextCursorOffset = result.cursor
     } else {
-      nextValue = originalValue.slice(0, cursorOffset) + input + originalValue.slice(cursorOffset)
-      nextCursorOffset += input.length
+      const result = insertAt(originalValue, cursorOffset, input)
+      nextValue = result.value
+      nextCursorOffset = result.cursor
       if (input.length > 1) nextCursorWidth = input.length
     }
 
-    if (cursorOffset < 0) nextCursorOffset = 0
-    if (cursorOffset > originalValue.length) nextCursorOffset = originalValue.length
+    if (nextCursorOffset < 0) nextCursorOffset = 0
+    if (nextCursorOffset > nextValue.length) nextCursorOffset = nextValue.length
 
     setState({ cursorOffset: nextCursorOffset, cursorWidth: nextCursorWidth })
     void cursorActualWidth

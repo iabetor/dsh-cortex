@@ -120,22 +120,23 @@ export function CortexTextInput(props: CortexTextInputProps): React.JSX.Element 
   // hiding every row after the first.
   const rows = wrapByWidth(value, usableWidth)
   let cursorRow = rows.length - 1
-  let cursorCol = sw(rows[cursorRow] ?? '')
+  let cursorCol = (rows[cursorRow] ?? '').length
   if (value === '') {
     cursorRow = 0
     cursorCol = 0
   } else {
+    // Walk the rows by CHARACTER count: cursorOffset and row.slice() are both
+    // character indices, while sw() is display width. Mixing the two put the
+    // cursor inside the text whenever a wrapped row held wide (CJK) glyphs.
     let remaining = cursorOffset
     for (let i = 0; i < rows.length; i += 1) {
-      const rowWidth = sw(rows[i] ?? '')
-      // The cursor belongs to this row when it falls inside it (or exactly at
-      // its end and this is the last row / the next row starts a new source line).
-      if (remaining <= rowWidth) {
+      const rowLength = (rows[i] ?? '').length
+      if (remaining <= rowLength) {
         cursorRow = i
         cursorCol = remaining
         break
       }
-      remaining -= rowWidth
+      remaining -= rowLength
     }
   }
   const showFakeCursor = showCursor && focus

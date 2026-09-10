@@ -249,32 +249,37 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
 
   const isBusy = (): boolean => store.snapshot().busy || turnRunning
 
-  /** Queue one line; auto-send queued lines one at a time after each turn. */
+  /** Queue one line; auto-send queued lines one at a time after each turn.
+   *  The queue is mirrored into UI state so it renders next to the input box
+   *  instead of scrolling away in the transcript. */
   const queueInput = (text: string): void => {
     pendingQueue.push(text)
-    store.apply({ kind: 'system', message: `⏳ 已排队 (${pendingQueue.length}): ${text.length > 60 ? `${text.slice(0, 60)}…` : text}` })
+    store.setQueuedInputs(pendingQueue)
     if (!isBusy()) {
       const next = pendingQueue.shift()
+      store.setQueuedInputs(pendingQueue)
       if (next !== undefined) startTurn(next)
     }
   }
 
-  /** Enter (submit): idle → new turn; busy → queue. */
+  /** Enter (submit): idle → new turn; busy → steer into the running turn.
+   *  Codex-aligned: Enter is the steer key. */
   const onSubmit = (text: string): void => {
-    if (isBusy()) {
-      queueInput(text)
-      return
-    }
-    startTurn(text)
-  }
-
-  /** Tab: idle → new turn (same as Enter); busy → steer into running turn. */
-  const onSteer = (text: string): void => {
     if (isBusy()) {
       store.beginTurn(text)
       store.apply({ kind: 'system', message: `⚡ 插入到当前回合: ${text.length > 60 ? `${text.slice(0, 60)}…` : text}` })
       void steerTurn(ctx, agent, text, emit)
         .catch((error: unknown) => emit({ kind: 'error', message: error instanceof Error ? error.message : String(error) }))
+      return
+    }
+    startTurn(text)
+  }
+
+  /** Tab: idle → new turn (same as Enter); busy → queue for the next turn.
+   *  Codex-aligned: Tab is the queue key. */
+  const onSteer = (text: string): void => {
+    if (isBusy()) {
+      queueInput(text)
       return
     }
     startTurn(text)
@@ -306,10 +311,8 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
         turnRunning = false
         // Auto-send the next queued input, one at a time.
         const next = pendingQueue.shift()
-        if (next !== undefined) {
-          store.apply({ kind: 'system', message: `发送排队消息 (剩 ${pendingQueue.length})` })
-          startTurn(next)
-        }
+        store.setQueuedInputs(pendingQueue)
+        if (next !== undefined) startTurn(next)
       })
   }
 
@@ -423,7 +426,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
         const imgText = `Please use the read_image tool to read the image at "${imgPath}" and analyze it.`
         if (isBusy()) {
           pendingQueue.push(imgText)
-          store.apply({ kind: 'system', message: `⏳ 已排队 (${pendingQueue.length}): 📷 ${imgPath}` })
+          store.setQueuedInputs(pendingQueue)
           return
         }
         startTurn(imgText)

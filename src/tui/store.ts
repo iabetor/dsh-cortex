@@ -72,6 +72,8 @@ export interface CortexUiState {
   questions: QuestionItem[] | null
   /** Pending sandbox-approval request; null when none. */
   approval: ApprovalRequest | null
+  /** Inputs queued while a turn runs; rendered just above the input box. */
+  queuedInputs: string[]
 }
 
 const initialState: CortexUiState = {
@@ -91,6 +93,7 @@ const initialState: CortexUiState = {
   transcriptOverlay: null,
   questions: null,
   approval: null,
+  queuedInputs: [],
 }
 
 /**
@@ -325,6 +328,15 @@ export class CortexStore {
   /** Update the reasoning-effort display (after /effort). */
   setEffort(effort: string): void {
     this.state = { ...this.state, effort }
+    this.notify()
+  }
+
+  /**
+   * Mirror the pending input queue into UI state so it can render beside the
+   * input box instead of scrolling away in the transcript.
+   */
+  setQueuedInputs(items: readonly string[]): void {
+    this.state = { ...this.state, queuedInputs: [...items] }
     this.notify()
   }
 

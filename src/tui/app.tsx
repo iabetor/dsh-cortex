@@ -204,7 +204,8 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
       }
       return
     }
-    // Tab with a draft: steer into the running turn (busy) or send (idle).
+    // Tab with a draft: queue for the next turn (busy) or send (idle).
+    // Codex-aligned: Enter steers, Tab queues.
     if (key.tab && inputRef.current.trim() !== '') {
       const line = inputRef.current.trim()
       setInput('')
@@ -382,6 +383,21 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
             <ThinkingSpinner verbose={false} text="" />
           )}
 
+          {/* Queued inputs — pinned right above the input box so they stay
+              visible while the transcript above keeps streaming. */}
+          {state.queuedInputs.length > 0 && (
+            <Box flexShrink={0} flexDirection="column" paddingX={1}>
+              <Text color="yellow" dimColor>
+                ⏳ 已排队 ({state.queuedInputs.length}) · 当前回合结束后依次发送
+              </Text>
+              {state.queuedInputs.map((q, i) => (
+                <Text key={i} color="yellow" dimColor>
+                  {'  '}{i + 1}. {truncateWidth(q.replace(/\n/g, ' ⏎ '), Math.max(10, barWidth - 8))}
+                </Text>
+              ))}
+            </Box>
+          )}
+
           {/* Input box — fixed at bottom */}
           <Box flexShrink={0} borderStyle="single" borderColor="green" paddingX={1}>
             <Text color="green" bold>{'❯ '}</Text>
@@ -389,7 +405,7 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
               value={input}
               onChange={setInput}
               onSubmit={handleSubmit}
-              placeholder={state.busy ? 'agent running — Enter queue · Tab steer' : 'type a message… (/model, /quit, Ctrl+O 查看)'}
+              placeholder={state.busy ? 'agent running — Enter 插入当前回合 · Tab 排队' : 'type a message… (/model, /quit, Ctrl+O 查看)'}
               focus
             />
           </Box>

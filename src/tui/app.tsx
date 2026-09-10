@@ -25,7 +25,8 @@
  */
 
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Box, Static, Text, useAnimation, useApp, useInput } from 'ink'
+import { Box, Static, Text, useAnimation, useApp, useInput, useStdout } from 'ink'
+import stringWidth from 'string-width'
 import { CortexTextInput } from './text-input.tsx'
 import type { CortexStore } from './store.ts'
 import type { CommittedLine } from './store.ts'
@@ -111,6 +112,25 @@ function formatDuration(ms: number): string {
   return `${minutes}m${String(seconds).padStart(2, '0')}s`
 }
 
+/**
+ * Truncate a string so its DISPLAY width fits `maxWidth` (CJK/emoji count
+ * double). The status bar is a single row: anything wider soft-wraps and ink
+ * mis-measures its height, smearing the layout below it.
+ */
+function truncateWidth(s: string, maxWidth: number): string {
+  if (maxWidth <= 0) return ''
+  if (stringWidth(s) <= maxWidth) return s
+  let out = ''
+  let w = 0
+  for (const ch of s) {
+    const cw = stringWidth(ch)
+    if (w + cw > maxWidth - 1) break
+    out += ch
+    w += cw
+  }
+  return `${out}…`
+}
+
 /** Animated "thinking" indicator for the live reasoning line. */
 function ThinkingSpinner(props: { verbose: boolean; text: string }): React.JSX.Element {
   const { verbose, text } = props
@@ -150,6 +170,11 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
   const turnElapsed = state.busy
     ? (state.turnStartedAt === null ? null : now - state.turnStartedAt)
     : state.lastTurnMs
+
+  // Status-bar budget: the row must stay ONE physical line, or ink mis-measures
+  // its height and smears everything below. Reserve the border (2) + padding (2).
+  const { stdout } = useStdout()
+  const barWidth = Math.max(20, (stdout.columns || 80) - 4)
 
   useInput((inputChar, key) => {
     // Any full-screen overlay owns the keyboard while open; global chords
@@ -275,41 +300,60 @@ export function CortexApp(props: CortexAppProps): React.JSX.Element {
   // Overlay closed: full main view.
   return (
     <Box flexDirection="column" height="100%">
-      {/* Status bar — hidden while an overlay is open */}
-      {overlay === null && (
-        <Box flexShrink={0} borderStyle="single" borderColor="cyan" paddingX={1}>
-          <Text color="cyan" bold>{state.model || 'no model'}</Text>
-          {state.effort !== '' && (
-            <>
-              <Text dimColor> · </Text>
-              <Text color="cyan">effort: {state.effort}</Text>
-            </>
-          )}
-          {state.sandboxMode !== '' && (
-            <>
-              <Text dimColor> · </Text>
-              <Text color={state.sandboxMode === 'danger-full-access' ? 'yellow' : 'cyan'}>
-                {sandboxLabel(state.sandboxMode)}
-              </Text>
-            </>
-          )}
-          {turnElapsed !== null && (
-            <>
-              <Text dimColor> · </Text>
-              <Text color={state.busy ? 'yellow' : 'cyan'} dimColor={!state.busy}>
-                ⏱ {formatDuration(turnElapsed)}
-              </Text>
-            </>
-          )}
-          <Text dimColor> · </Text>
-          <Text color="cyan" dimColor>{state.cwd || '~'}</Text>
-          {state.busy && <Text color="yellow">{' ⏳'}</Text>}
-          <Text dimColor>  </Text>
-          <Text color="gray" dimColor>
-            {state.busy ? 'esc: 取消 · ' : ''}ctrl+o: 查看全部工具/思考
-          </Text>
-        </Box>
-      )}
+      {/* Status bar — hidden while an overlay is open. Every segment is
+          width-budgeted so the row never soft-wraps. */}
+      {overlay === null && (() => {
+        const hint = `${state.busy ? 'esc: 取消 · ' : ''}ctrl+o: 查看全部工具/思考`
+        const head = [
+          state.model || 'no model',
+          ...(state.effort === '' ? [] : [`effort: ${state.effort}`]),
+          ...(state.sandboxMode === '' ? [] : [sandboxLabel(state.sandboxMode)]),
+          ...(turnElapsed === null ? [] : [`⏱ ${formatDuration(turnElapsed)}`]),
+        ]
+        const headWidth = head.reduce((n, s) => n + stringWidth(s), 0) + (head.length - 1) * 3
+        const hintWidth = stringWidth(hint)
+        // cwd gets whatever is left after the fixed head, the hint, and the
+        // busy glyph; it is truncated (never wrapped) when space runs out.
+        const busyWidth = state.busy ? 2 : 0
+        const cwdBudget = Math.max(0, barWidth - headWidth - hintWidth - busyWidth - 6)
+        const cwd = truncateWidth(state.cwd || '~', cwdBudget)
+        return (
+          <Box flexShrink={0} borderStyle="single" borderColor="cyan" paddingX={1}>
+            <Text color="cyan" bold>{head[0]}</Text>
+            {state.effort !== '' && (
+              <>
+                <Text dimColor> · </Text>
+                <Text color="cyan">effort: {state.effort}</Text>
+              </>
+            )}
+            {state.sandboxMode !== '' && (
+              <>
+                <Text dimColor> · </Text>
+                <Text color={state.sandboxMode === 'danger-full-access' ? 'yellow' : 'cyan'}>
+                  {sandboxLabel(state.sandboxMode)}
+                </Text>
+              </>
+            )}
+            {turnElapsed !== null && (
+              <>
+                <Text dimColor> · </Text>
+                <Text color={state.busy ? 'yellow' : 'cyan'} dimColor={!state.busy}>
+                  ⏱ {formatDuration(turnElapsed)}
+                </Text>
+              </>
+            )}
+            {cwd !== '' && (
+              <>
+                <Text dimColor> · </Text>
+                <Text color="cyan" dimColor>{cwd}</Text>
+              </>
+            )}
+            {state.busy && <Text color="yellow">{' ⏳'}</Text>}
+            <Text dimColor>  </Text>
+            <Text color="gray" dimColor>{hint}</Text>
+          </Box>
+        )
+      })()}
 
       {/* Committed transcript — appended to terminal scrollback, never
           redrawn. ALWAYS mounted (both branches) to keep its internal

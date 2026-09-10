@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import { Box, Text, useInput, usePaste, useStdout } from 'ink'
 import chalk from 'chalk'
 import stringWidth from 'string-width'
 
@@ -89,7 +89,10 @@ export function CortexTextInput(props: CortexTextInputProps): React.JSX.Element 
   const { stdout } = useStdout()
   // Rows must fit one physical line: fall back to the terminal width minus the
   // prompt + border margin when the caller does not pass an explicit width.
-  const usableWidth = Math.max(1, width ?? (stdout.columns ?? 80) - 6)
+  // `||` (not ??) matters: a fresh PTY can report columns as 0, and a tiny or
+  // negative result would wrap every character onto its own row.
+  const columns = width ?? (stdout.columns || 80) - 6
+  const usableWidth = Math.max(20, columns)
 
   const [state, setState] = useState({
     cursorOffset: (originalValue || '').length,
@@ -137,6 +140,17 @@ export function CortexTextInput(props: CortexTextInputProps): React.JSX.Element 
   }
   const showFakeCursor = showCursor && focus
   const renderedRows = rows.length === 0 ? [''] : rows
+
+  // Bracketed paste (ink enables \x1b[?2004h while this hook is active):
+  // pasted text arrives as ONE string, so its newlines are inserted verbatim
+  // instead of being mistaken for Enter and submitting the first line.
+  usePaste((pasted) => {
+    if (!focus) return
+    const text = pasted.replace(/\r\n?/g, '\n')
+    const next = originalValue.slice(0, cursorOffset) + text + originalValue.slice(cursorOffset)
+    setState({ cursorOffset: cursorOffset + text.length, cursorWidth: 0 })
+    onChange(next)
+  }, { isActive: focus })
 
   useInput((input, key) => {
     // Reserved keys that upstream ignores.

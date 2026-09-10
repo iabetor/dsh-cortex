@@ -216,6 +216,13 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
   const doExit = (): void => {
     if (exiting) return
     exiting = true
+    // Safety net: if this session already carries user input but was never
+    // bound (e.g. an interrupted turn before the attach landed), bind it now
+    // so quitting never leaves a used session ungrouped. Empty sessions are
+    // skipped, so a stray launch still leaves no blank workspace row.
+    if (!attachedWorkspace && store.snapshot().committed.some(line => line.kind === 'user')) {
+      attachOnce()
+    }
     const flush = flushSession(ctx, agent)
     const timer = setTimeout(() => { io.exit(0) }, 3000)
     void flush
@@ -276,19 +283,27 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
   let attachedWorkspace = false
   /** Pending lazy attach; awaited on exit so the binding is never lost. */
   let pendingAttach: Promise<void> | null = null
+  /**
+   * Bind the session to its cwd workspace on the FIRST real user input (not
+   * after the turn finishes): a session the user actually typed into belongs
+   * in the group even if the turn is cancelled or the process dies midway.
+   * Empty sessions — started and abandoned with no input — still never attach,
+   * so they cannot leave a blank workspace row.
+   */
+  const attachOnce = (): void => {
+    if (attachedWorkspace || resumeId !== undefined) return
+    attachedWorkspace = true
+    pendingAttach = attachToWorkspace(ctx, agent.session.id).catch(() => { /* non-fatal */ })
+  }
+
   const startTurn = (text: string): void => {
     turnRunning = true
+    attachOnce()
     store.beginTurn(text)
     void runTurn(ctx, agent, text, emit)
       .catch((error: unknown) => emit({ kind: 'error', message: error instanceof Error ? error.message : String(error) }))
       .finally(() => {
         turnRunning = false
-        // Lazy workspace attach: only after the first real turn produced
-        // content (new sessions). Empty throwaway sessions never attach.
-        if (!attachedWorkspace && resumeId === undefined) {
-          attachedWorkspace = true
-          pendingAttach = attachToWorkspace(ctx, agent.session.id).catch(() => { /* non-fatal */ })
-        }
         // Auto-send the next queued input, one at a time.
         const next = pendingQueue.shift()
         if (next !== undefined) {

@@ -27,6 +27,18 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { openAgent, runTurn, steerTurn, flushSession, listModels, switchModel, switchSandboxMode, currentSandboxMode, currentReasoningEffort, attachToWorkspace, installQuestionAnswerer, installApprovalAnswerer, cancelTurn } from './driver.ts'
 import type { QuestionItem, QuestionAnswer, ApprovalRequest, ApprovalOutcome } from './driver.ts'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /**
+     * The interactive approval prompt's rejection reason, fed back to the model.
+     * V4 retired the generic wrapper: the source map is a merge-extensible sum
+     * type, so a producer names itself instead of pairing one shared wrapper
+     * kind with a separate producer field.
+     */
+    'cortex': { kind: 'cortex' } & ContextFormed
+  }
+}
 import type { CortexEvent } from './driver.ts'
 import { CortexStore } from './tui/store.ts'
 import { InputQueue } from './input-queue.ts'
@@ -204,7 +216,7 @@ async function runRepl(ctx: Context, io: CortexIo, choice: ReplSessionChoice): P
       // Feed the human's rejection reason back to the model.
       agent.followup(createUserMessage({
         content: [{ type: 'text', text: `用户拒绝了这次工作区外操作: ${decision.reason}` }],
-        source: { kind: 'plugin', plugin: 'cortex' },
+        source: { kind: 'cortex' },
       }))
     }
     return decision.outcome
